@@ -19,9 +19,6 @@ O **PrintHook** é uma solução robusta para automação de impressão em event
 - 🌐 **API RESTful** - Documentação Swagger completa
 - 📊 **Monitoramento** - Health checks e status da fila em tempo real
 - 🔄 **Resiliência** - Retry automático e fallback inteligente
-- 🐳 **Docker Ready** - Pronto para containerização
-
-## 🏗️ Arquitetura
 
 ## 🚀 Começando Rápido
 
@@ -182,5 +179,3 @@ O endpoint /print/health retorna:
   }
 }
 ```
-# print-hook
-# print-hook
