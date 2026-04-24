@@ -155,7 +155,7 @@ describe('PrintController (e2e)', () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.status).toBe('healthy');
-      expect(response.body.data.service).toBe('PrintHook');
+      expect(response.body.data.service).toBe('IBCPrinter');
     });
   });
 

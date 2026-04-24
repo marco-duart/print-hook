@@ -11,8 +11,8 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('Print Hook API')
-    .setDescription('API documentation for Print Hook application')
+    .setTitle('IBCPrinter API')
+    .setDescription('API documentation for IBCPrinter application')
     .setVersion('1.0')
     .addServer('v1', 'Version 1')
     .build();
@@ -36,7 +36,7 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   await app.listen(port);
 
-  logger.log(`🚀 PrintHook rodando em: http://localhost:${port}`);
+  logger.log(`🚀 IBCPrinter rodando em: http://localhost:${port}`);
   logger.log(`📚 Documentação Swagger: http://localhost:${port}/api/docs`);
 }
 bootstrap();

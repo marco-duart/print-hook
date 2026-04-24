@@ -1,3 +1,5 @@
+import { SrvRecord } from 'dns';
+
 export interface PrinterInfo {
   name: string;
   isDefault: boolean;
@@ -22,9 +24,11 @@ export interface IPrinterService {
     copies?: number,
   ): Promise<PrintResult>;
   printText(
-    text: string,
+    name: string,
+    nickname: string,
     printerName: string,
     copies?: number,
+    course?: string,
   ): Promise<PrintResult>;
   getDefaultPrinter(): Promise<string>;
 }

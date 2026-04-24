@@ -223,7 +223,7 @@ export class PrintController {
       success: true,
       status: 'healthy',
       data: {
-        service: 'PrintHook',
+        service: 'IBCPrinter',
         version: '1.0.0',
         timestamp: new Date(),
         printers: {

@@ -2,9 +2,6 @@ import { IsString, IsOptional, IsNumber, Min } from 'class-validator';
 
 export class PrintTextDto {
   @IsString()
-  text: string;
-
-  @IsString()
   @IsOptional()
   printerName?: string;
 
@@ -12,4 +9,14 @@ export class PrintTextDto {
   @Min(1)
   @IsOptional()
   copies?: number = 1;
+
+  @IsString()
+  name: string;
+
+  @IsString()
+  nickname: string;
+
+  @IsString()
+  @IsOptional()
+  course?: string;
 }

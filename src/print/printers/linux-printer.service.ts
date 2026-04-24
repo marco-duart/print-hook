@@ -8,6 +8,8 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import * as temp from 'temp';
 import * as fs from 'fs-extra';
+import nodeHtmlToImage from 'node-html-to-image';
+import * as path from 'path';
 
 const execAsync = promisify(exec);
 
@@ -16,90 +18,31 @@ export class LinuxPrinterService implements IPrinterService {
   private readonly logger = new Logger(LinuxPrinterService.name);
 
   async getPrinters(): Promise<PrinterInfo[]> {
-    try {
-      const { stdout } = await execAsync(
-        'lpstat -p 2>/dev/null || echo "No printers"',
-      );
+    const { stdout } = await execAsync('LC_ALL=C lpstat -p');
 
-      if (stdout.includes('No printers') || stdout.trim() === '') {
-        return await this.getPrintersFromCups();
-      }
+    const printers: PrinterInfo[] = [];
 
-      const printers: PrinterInfo[] = [];
-      const lines = stdout.split('\n').filter((line) => line.trim());
+    stdout
+      .split('\n')
+      .filter((line) => line.startsWith('printer '))
+      .forEach((line) => {
+        const name = line.split(' ')[1];
 
-      for (const line of lines) {
-        if (line.startsWith('printer')) {
-          const parts = line.split(' ');
-          const name = parts[1];
-          const status = line.includes('enabled') ? 'ready' : 'disabled';
-
-          printers.push({
-            name,
-            isDefault: await this.isDefaultPrinter(name),
-            status,
-            isOnline: status === 'ready',
-            description: line,
-          });
-        }
-      }
-
-      if (printers.length === 0) {
-        return await this.getPrintersFromCups();
-      }
-
-      return printers;
-    } catch (error) {
-      this.logger.warn(
-        'Erro ao listar impressoras Linux, tentando método alternativo:',
-        error,
-      );
-      return await this.getPrintersFromCups();
-    }
-  }
-
-  private async getPrintersFromCups(): Promise<PrinterInfo[]> {
-    try {
-      const { stdout } = await execAsync(
-        'lpinfo -v 2>/dev/null || echo "No printers"',
-      );
-
-      const printers: PrinterInfo[] = [];
-      const lines = stdout.split('\n').filter((line) => line.includes('://'));
-
-      lines.forEach((line) => {
-        const parts = line.split(' ');
-        if (parts.length >= 2) {
-          const device = parts[1];
-          const name = device.split('/').pop() || device;
-
-          printers.push({
-            name,
-            isDefault: printers.length === 0,
-            status: 'unknown',
-            isOnline: true,
-            description: device,
-          });
-        }
+        printers.push({
+          name,
+          isDefault: false,
+          status: line.includes('enabled') ? 'ready' : 'disabled',
+          isOnline: !line.includes('disabled'),
+          description: line,
+        });
       });
 
-      if (printers.length === 0) {
-        printers.push({
-          name: 'PDF',
-          isDefault: true,
-          status: 'ready',
-          isOnline: true,
-          description: 'Virtual PDF Printer',
-        });
-      }
+    const defaultPrinter = await this.getDefaultPrinter();
+    printers.forEach((p) => {
+      p.isDefault = p.name === defaultPrinter;
+    });
 
-      return printers;
-    } catch (error) {
-      this.logger.error('Falha ao obter impressoras do CUPS:', error);
-      throw new Error(
-        'Sistema de impressão não disponível no Linux. Instale CUPS: sudo apt install cups',
-      );
-    }
+    return printers;
   }
 
   async printPDF(
@@ -130,24 +73,82 @@ export class LinuxPrinterService implements IPrinterService {
       };
     } catch (error) {
       fs.unlinkSync(tempFile.path);
-      throw new Error(`Falha ao imprimir PDF: ${error.message}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(`Falha ao imprimir PDF: ${errorMessage}`);
     }
   }
 
   async printText(
-    text: string,
+    name: string,
+    nickname: string,
     printerName: string,
     copies: number = 1,
+    course?: string,
   ): Promise<PrintResult> {
+    const tempFileName = `print_${Date.now()}.png`;
+    const tempImagePath = path.join(process.cwd(), tempFileName);
+
     try {
-      const command = `printf "%s" "${this.escapeText(text)}" | lp -d "${printerName}" -n ${copies}`;
+      await nodeHtmlToImage({
+        output: tempImagePath,
+        html: `
+        <html>
+          <head>
+            <style>
+              body { 
+                width: 3000px;     
+                background-color: white;
+                padding: 0px;
+                magin: 0px;
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                justify-content: flex-start;
+              }
+              .container { 
+                text-align: left; 
+                margin-left: 0px; 
+              }
+              .name { 
+                font-size: 150px; 
+                color: black;
+                margin-bottom: 10px;
+                font-family: Arial, sans-serif;
+              }
+              .nickname { 
+                font-size: 200px; 
+                font-weight: bold; 
+                color: #333; 
+                font-family: Arial, sans-serif;
+              }
+              .course {
+                font-size: 150px;
+                color: black;
+                font-family: Arial, sans-serif;
+              }
+            </style>
+          </head>
+          <body>
+            <div class="container">
+            <div class="nickname">${nickname}</div>
+              <div class="name">${name}</div>
+              ${course ? `<div class="course">${course}</div>` : ''}
+            </div>
+          </body>
+        </html>
+      `,
+        puppeteerArgs: { args: ['--no-sandbox, --disable-setuid-sandbox'] },
+      });
+
+      const command = `lp -d "${printerName}" -n ${copies} -o orientation-requested=4 -o position=top-left "${tempImagePath}"`;
       const { stdout } = await execAsync(command);
 
       const jobId = this.extractJobId(stdout);
 
-      this.logger.log(
-        `Texto enviado para impressão Linux - Job: ${jobId}, Impressora: ${printerName}`,
-      );
+      if (fs.existsSync(tempImagePath)) {
+        fs.unlinkSync(tempImagePath);
+      }
 
       return {
         success: true,
@@ -156,7 +157,10 @@ export class LinuxPrinterService implements IPrinterService {
         timestamp: new Date(),
       };
     } catch (error) {
-      throw new Error(`Falha ao imprimir texto: ${error.message}`);
+      if (fs.existsSync(tempImagePath)) fs.unlinkSync(tempImagePath);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      throw new Error(`Falha ao imprimir: ${errorMessage}`);
     }
   }
 
@@ -167,39 +171,24 @@ export class LinuxPrinterService implements IPrinterService {
       );
 
       if (stdout.includes('No default') || !stdout.includes(':')) {
-        const printers = await this.getPrinters();
-        const defaultPrinter = printers.find((p) => p.isDefault);
-        return defaultPrinter?.name || printers[0]?.name || 'PDF';
+        const { stdout: printersOutput } = await execAsync('LC_ALL=C lpstat -p');
+        const firstPrinterLine = printersOutput
+          .split('\n')
+          .find((line) => line.startsWith('printer '));
+
+        return firstPrinterLine?.split(' ')[1] || 'PDF';
       }
 
       const parts = stdout.split(':');
       return parts[1]?.trim() || 'PDF';
     } catch (error) {
       this.logger.warn('Não foi possível obter impressora padrão:', error);
-      const printers = await this.getPrinters();
-      return printers[0]?.name || 'PDF';
-    }
-  }
-
-  private async isDefaultPrinter(printerName: string): Promise<boolean> {
-    try {
-      const defaultPrinter = await this.getDefaultPrinter();
-      return defaultPrinter === printerName;
-    } catch {
-      return false;
+      return 'PDF';
     }
   }
 
   private extractJobId(output: string): string {
     const match = output.match(/request id is ([^\s]+)/i);
     return match ? match[1] : `linux-${Date.now()}`;
-  }
-
-  private escapeText(text: string): string {
-    return text
-      .replace(/"/g, '\\"')
-      .replace(/\$/g, '\\$')
-      .replace(/`/g, '\\`')
-      .replace(/\n/g, '\\n');
   }
 }

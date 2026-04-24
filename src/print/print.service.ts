@@ -75,9 +75,11 @@ export class PrintService {
 
     try {
       const result = await this.printerService.printText(
-        printDto.text,
+        printDto.name,
+        printDto.nickname,
         printerName,
         printDto.copies,
+        printDto.course,
       );
 
       this.logger.log(`✅ Texto impresso com sucesso - Job: ${result.jobId}`);
